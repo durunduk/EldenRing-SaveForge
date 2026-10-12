@@ -56,7 +56,7 @@ import { SafetyModeProvider } from '../state/safetyMode';
 import { FavoritesProvider } from '../state/favorites';
 import type { SafetyProfile } from '../state/safetyProfile';
 import toast from '../lib/toast';
-import { DiagnosticRecoveryStatus, ExportDiagnosticLog, GetSteamIDString, PrepareConversion, SetSteamIDFromString } from '../../wailsjs/go/main/App';
+import { DiagnosticRecoveryStatus, ExecuteConversion, ExportDiagnosticLog, GetSteamIDString, PrepareConversion, SetSteamIDFromString } from '../../wailsjs/go/main/App';
 
 // jsdom here has no localStorage; SettingsTab reads it for the Full Chaos toggle.
 const lsStore: Record<string, string> = {};
@@ -244,32 +244,39 @@ describe('SettingsTab tools', () => {
     });
 });
 
-describe('SettingsTab Convert Format (disabled)', () => {
+describe('SettingsTab Convert Format', () => {
     beforeEach(() => {
         (PrepareConversion as ReturnType<typeof vi.fn>).mockReset();
+        (ExecuteConversion as ReturnType<typeof vi.fn>).mockReset();
     });
 
-    it('renders Convert Format disabled with an unavailable tooltip', () => {
+    it('renders Convert Format enabled', () => {
         renderSettings();
-        const btn = screen.getByRole('button', { name: /Convert Format/i });
-        expect(btn).toBeDisabled();
-        expect(btn).toHaveAttribute('title', 'Format conversion is currently unavailable');
+        expect(screen.getByRole('button', { name: /Convert Format/i })).toBeEnabled();
     });
 
     it('placed at the end of the Tools action list', () => {
         renderSettings();
         const convert = screen.getByRole('button', { name: /Convert Format/i });
-        // Convert Format comes after the other active tool buttons in the DOM.
         for (const name of [/Favorite Items/i, /Diagnostics/i]) {
             const other = screen.getByRole('button', { name });
             expect(other.compareDocumentPosition(convert) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         }
     });
 
-    it('cannot invoke the conversion flow when clicked', () => {
+    it('starts the conversion flow when clicked', async () => {
+        (PrepareConversion as ReturnType<typeof vi.fn>).mockRejectedValue('no file selected');
         renderSettings();
         fireEvent.click(screen.getByRole('button', { name: /Convert Format/i }));
-        expect(PrepareConversion).not.toHaveBeenCalled();
+        await waitFor(() => expect(PrepareConversion).toHaveBeenCalledTimes(1));
+    });
+
+    it('asks for a Steam ID when converting a PS4 save to PC', async () => {
+        (PrepareConversion as ReturnType<typeof vi.fn>).mockResolvedValue({ path: '/x/memory.dat', platform: 'PS4' });
+        renderSettings();
+        fireEvent.click(screen.getByRole('button', { name: /Convert Format/i }));
+        expect(await screen.findByText(/Steam ID Required/i)).toBeInTheDocument();
+        expect(ExecuteConversion).not.toHaveBeenCalled();
     });
 });
 

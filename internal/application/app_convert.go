@@ -1,7 +1,6 @@
 package application
 
 import (
-	"crypto/rand"
 	"fmt"
 	"os"
 	"strconv"
@@ -73,15 +72,17 @@ func (a *App) ExecuteConversion(sourcePath string, targetPlatform string, steamI
 			a.journalLog(levelError, "save_conversion_failed", "save conversion failed", field("stage", "steam_id"))
 			return "", fmt.Errorf("invalid Steam ID: %w", err)
 		}
-		iv := make([]byte, 16)
-		if _, err := rand.Read(iv); err != nil {
-			a.journalLog(levelError, "save_conversion_failed", "save conversion failed", field("stage", "iv"))
-			return "", fmt.Errorf("failed to generate IV: %w", err)
+		if steamID == 0 {
+			a.journalLog(levelError, "save_conversion_failed", "save conversion failed", field("stage", "steam_id"))
+			return "", fmt.Errorf("invalid Steam ID: must be non-zero")
 		}
+		// Native Elden Ring PC saves are plain BND4 containers (per-entry MD5,
+		// no AES layer). Writing an AES-wrapped file produced output that neither
+		// the game nor LoadSave (strict BND4 detection) accepts.
 		save.Platform = core.PlatformPC
-		save.Encrypted = true
-		save.IV = iv
-		save.SteamID = steamID // flushMetadata writes this to UserData10
+		save.Encrypted = false
+		save.IV = nil
+		save.SteamID = steamID // flushMetadata writes this to UserData10; SaveFile syncs every active slot
 	case "PS4":
 		save.Platform = core.PlatformPS
 		save.Encrypted = false
